@@ -10,3 +10,5 @@ For more detailed information about the project and starter code, please refer t
 ## Acknowledgement
 
 The implementation is based on thr oriingal code for UCLA CS118 Project3 by professor Alexander Afanasyev.
+
+Try git commit function.
