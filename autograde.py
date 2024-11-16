@@ -22,7 +22,7 @@ import re, time, os, sys, logging, Ice, traceback
 
 log = logging.getLogger("Auto Grader")
 logging.basicConfig(stream=sys.stderr)
-log.setLevel(logging.ERROR) # can be set to CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET, etc.
+log.setLevel(logging.DEBUG) # can be set to CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET, etc.
 
 score = 0
 tester = None

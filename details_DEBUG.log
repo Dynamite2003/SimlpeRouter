@@ -1,0 +1,181 @@
+router@ubuntu:~/Desktop/code$ sudo ./autograde.py 
+sw0-eth1 192.168.2.1
+sw0-eth2 172.64.3.1
+sw0-eth3 10.0.1.1
+server1 192.168.2.2
+server2 172.64.3.10
+client 10.0.1.100
+*** Successfully loaded ip settings for hosts
+ {'server1': '192.168.2.2', 'server2': '172.64.3.10', 'client': '10.0.1.100', 'sw0-eth1': '192.168.2.1', 'sw0-eth2': '172.64.3.1', 'sw0-eth3': '10.0.1.1'}
+*** Creating network
+*** Creating network
+*** Adding controller
+*** Adding hosts:
+client server1 server2 
+*** Adding switches:
+sw0 
+*** Adding links:
+(client, sw0) (server1, sw0) (server2, sw0) 
+*** Configuring hosts
+client server1 server2 
+*** Starting controller
+c0 
+*** Starting 1 switches
+sw0 ...
+*** setting default gateway of host server1
+server1 192.168.2.1
+*** setting default gateway of host server2
+server2 172.64.3.1
+*** setting default gateway of host client
+client 10.0.1.1
+*** Starting SimpleHTTPServer on host server1 
+*** Starting SimpleHTTPServer on host server2 
+
+*** Conducting Ping Tests.
+
+DEBUG:Auto Grader:PING 192.168.2.2 (192.168.2.2) 56(84) bytes of data.
+From 10.0.1.100 icmp_seq=1 Destination Host Unreachable
+
+--- 192.168.2.2 ping statistics ---
+1 packets transmitted, 0 received, +1 errors, 100% packet loss, time 0ms
+
+
+DEBUG:Auto Grader:sent = 1, received = 0
+ERROR:Auto Grader:ping from client to server1 failed
+DEBUG:Auto Grader:PING 172.64.3.10 (172.64.3.10) 56(84) bytes of data.
+From 10.0.1.100 icmp_seq=1 Destination Host Unreachable
+
+--- 172.64.3.10 ping statistics ---
+1 packets transmitted, 0 received, +1 errors, 100% packet loss, time 0ms
+
+
+DEBUG:Auto Grader:sent = 1, received = 0
+ERROR:Auto Grader:ping from client to server2 failed
+ERROR:Auto Grader:*** Fail to ping from client: -5 pts
+DEBUG:Auto Grader:nohup: appending output to 'nohup.out'
+PING 10.0.1.100 (10.0.1.100) 56(84) bytes of data.
+From 192.168.2.2 icmp_seq=1 Destination Host Unreachable
+
+--- 10.0.1.100 ping statistics ---
+1 packets transmitted, 0 received, +1 errors, 100% packet loss, time 0ms
+
+
+DEBUG:Auto Grader:sent = 1, received = 0
+ERROR:Auto Grader:ping from server1 to client failed
+DEBUG:Auto Grader:PING 172.64.3.10 (172.64.3.10) 56(84) bytes of data.
+From 192.168.2.2 icmp_seq=1 Destination Host Unreachable
+
+--- 172.64.3.10 ping statistics ---
+1 packets transmitted, 0 received, +1 errors, 100% packet loss, time 0ms
+
+
+DEBUG:Auto Grader:sent = 1, received = 0
+ERROR:Auto Grader:ping from server1 to server2 failed
+ERROR:Auto Grader:*** Fail to ping from server1: -5 pts
+DEBUG:Auto Grader:nohup: appending output to 'nohup.out'
+PING 10.0.1.100 (10.0.1.100) 56(84) bytes of data.
+From 172.64.3.10 icmp_seq=1 Destination Host Unreachable
+
+--- 10.0.1.100 ping statistics ---
+1 packets transmitted, 0 received, +1 errors, 100% packet loss, time 0ms
+
+
+DEBUG:Auto Grader:sent = 1, received = 0
+ERROR:Auto Grader:ping from server2 to client failed
+DEBUG:Auto Grader:PING 192.168.2.2 (192.168.2.2) 56(84) bytes of data.
+From 172.64.3.10 icmp_seq=1 Destination Host Unreachable
+
+--- 192.168.2.2 ping statistics ---
+1 packets transmitted, 0 received, +1 errors, 100% packet loss, time 0ms
+
+
+DEBUG:Auto Grader:sent = 1, received = 0
+ERROR:Auto Grader:ping from server2 to server1 failed
+ERROR:Auto Grader:*** Fail to ping from server2: -5 pts
+DEBUG:Auto Grader:ARP CACHE TABLE: 
+
+MAC            IP         AGE                       VALID
+-----------------------------------------------------------
+
+
+
+DEBUG:Auto Grader:ARP cache has 0 entries after client ping server1
+INFO:Auto Grader:Have 0 entries in ARP cache after client ping server1, 2 expected
+DEBUG:Auto Grader:ARP CACHE TABLE: 
+
+MAC            IP         AGE                       VALID
+-----------------------------------------------------------
+
+
+
+DEBUG:Auto Grader:ARP cache has 0 entries after client ping both servers
+INFO:Auto Grader:Have 0 entries in ARP cache after client ping server2 and server1, 3 expected
+ERROR:Auto Grader:*** Fail to maintain ARP cache entries properly: -5 pts
+DEBUG:Auto Grader:ARP CACHE TABLE: 
+
+MAC            IP         AGE                       VALID
+-----------------------------------------------------------
+
+
+
+DEBUG:Auto Grader:ARP cache has 0 entries after 40 s.
+ERROR:Auto Grader:*** Fail to empty ARP cache after 40 seconds: -5 pts
+
+*** Conducting Traceroute Tests.
+
+DEBUG:Auto Grader:traceroute to 192.168.2.2 (192.168.2.2), 30 hops max, 60 byte packets
+ 1  10.0.1.100 (10.0.1.100)  3061.969 ms !H  3070.945 ms !H  3072.337 ms !H
+
+DEBUG:Auto Grader:routes = ['10.0.1.100'], error = 3
+ERROR:Auto Grader:traceroute from client to server1 failed
+DEBUG:Auto Grader:traceroute to 172.64.3.10 (172.64.3.10), 30 hops max, 60 byte packets
+ 1  10.0.1.100 (10.0.1.100)  3069.364 ms !H  3071.348 ms !H  3071.920 ms !H
+
+DEBUG:Auto Grader:routes = ['10.0.1.100'], error = 3
+ERROR:Auto Grader:traceroute from client to server2 failed
+ERROR:Auto Grader:*** Fail to traceroute from client: -5 pts
+DEBUG:Auto Grader:traceroute to 10.0.1.100 (10.0.1.100), 30 hops max, 60 byte packets
+ 1  192.168.2.2 (192.168.2.2)  3070.121 ms !H  3071.214 ms !H  3072.310 ms !H
+
+DEBUG:Auto Grader:routes = ['192.168.2.2'], error = 3
+ERROR:Auto Grader:traceroute from server1 to client failed
+DEBUG:Auto Grader:traceroute to 172.64.3.10 (172.64.3.10), 30 hops max, 60 byte packets
+ 1  192.168.2.2 (192.168.2.2)  3069.615 ms !H  3070.990 ms !H  3071.838 ms !H
+
+DEBUG:Auto Grader:routes = ['192.168.2.2'], error = 3
+ERROR:Auto Grader:traceroute from server1 to server2 failed
+ERROR:Auto Grader:*** Fail to traceroute from server1: -5 pts
+DEBUG:Auto Grader:traceroute to 10.0.1.100 (10.0.1.100), 30 hops max, 60 byte packets
+ 1  172.64.3.10 (172.64.3.10)  3069.573 ms !H  3071.552 ms !H  3076.155 ms !H
+
+DEBUG:Auto Grader:routes = ['172.64.3.10'], error = 3
+ERROR:Auto Grader:traceroute from server2 to client failed
+DEBUG:Auto Grader:traceroute to 192.168.2.2 (192.168.2.2), 30 hops max, 60 byte packets
+ 1  172.64.3.10 (172.64.3.10)  3065.735 ms !H  3071.470 ms !H  3072.050 ms !H
+
+DEBUG:Auto Grader:routes = ['172.64.3.10'], error = 3
+ERROR:Auto Grader:traceroute from server2 to server1 failed
+ERROR:Auto Grader:*** Fail to traceroute from server2: -5 pts
+
+*** Conducting File Downloading Tests.
+
+DEBUG:Auto Grader:--2024-11-15 19:33:32--  http://192.168.2.2/tmp.1K
+Connecting to 192.168.2.2:80... failed: No route to host.
+
+DEBUG:Auto Grader:diff result: 'Binary files ./tmp.1K and ./http_server1/tmp.1K differ
+'
+INFO:Auto Grader:Fail to download 1K file from server1 to client
+ERROR:Auto Grader:*** Fail to download small file from http server: -5 pts
+*** Shutting down stale SimpleHTTPServers  
+*** Shutting down stale webservers  
+*** Stopping 1 controllers
+c0 
+*** Stopping 3 links
+...
+*** Stopping 1 switches
+sw0 
+*** Stopping 3 hosts
+client server1 server2 
+*** Done
+Your tests score is 0/45 pts
+THIS IS NOT YOUR FINAL SCORE !!!
