@@ -24,108 +24,131 @@
 
 #include "pox.hpp"
 
-namespace simple_router {
-
-class SimpleRouter
+namespace simple_router
 {
-public:
 
-  SimpleRouter();
+    class SimpleRouter
+    {
+    public:
+        SimpleRouter();
 
-  /**
-   * IMPLEMENT THIS METHOD
-   *
-   * This method is called each time the router receives a packet on
-   * the interface.  The packet buffer \p packet and the receiving
-   * interface \p inIface are passed in as parameters. The packet is
-   * complete with ethernet headers.
-   */
-  void
-  handlePacket(const Buffer& packet, const std::string& inIface);
+        // 处理ARP的函数
+        // 处理ARP数据包
+        void handleArpPacket(const Buffer &packet, const std::string &iface);
+        // 辅助函数 验证arp数据包合法
+        bool isValidArpHeader(const Buffer &packet, const arp_hdr *arpHeader) const;
+        // 根据操作码处理arp请求
+        void handleArpRequest(const Buffer &packet, const std::string &iface);
+        // 根据操作码处理arp回复
+        void handleArpReply(const Buffer &packet);
+        // 辅助函数 填充以太网帧header
+        void fillEthernetHeader(Buffer &packet, const uint8_t *srcMac, const uint8_t *dstMac, uint16_t etherType);
+        // 辅助函数 填充arp帧header
+        void fillArpHeader(Buffer &packet, uint32_t srcIp, const uint8_t *srcMac, uint32_t dstIp, const uint8_t *dstMac, uint16_t opCode);
 
-  /**
-   * USE THIS METHOD TO SEND PACKETS
-   *
-   * Call this method to send packet \p packt from the router on interface \p outIface
-   */
-  void
-  sendPacket(const Buffer& packet, const std::string& outIface);
+        // 处理IP的函数
+        // 处理IP数据包
+        void handleIPv4Packet(const Buffer &packet, const std::string &iface);
+        // 发送ARP请求
+        void sendArpRequest(uint32_t ip);
 
-  /**
-   * Load routing table information from \p rtConfig file
-   */
-  bool
-  loadRoutingTable(const std::string& rtConfig);
+        // 发送ICMP消息的函数
+        // 发送目的地址不可达的回复给源地址
+        void sendIcmpDestinationUnreachable(const Buffer &packet, const std::string &iface);
 
-  /**
-   * Load local interface configuration
-   */
-  void
-  loadIfconfig(const std::string& ifconfig);
+        /**
+         * IMPLEMENT THIS METHOD
+         *
+         * This method is called each time the router receives a packet on
+         * the interface.  The packet buffer \p packet and the receiving
+         * interface \p inIface are passed in as parameters. The packet is
+         * complete with ethernet headers.
+         */
+        void handlePacket(const Buffer &packet, const std::string &inIface);
 
-  /**
-   * Get routing table
-   */
-  const RoutingTable&
-  getRoutingTable() const;
+        /**
+         * USE THIS METHOD TO SEND PACKETS
+         *
+         * Call this method to send packet \p packt from the router on interface \p outIface
+         */
+        void
+        sendPacket(const Buffer &packet, const std::string &outIface);
 
-  /**
-   * Get ARP table
-   */
-  const ArpCache&
-  getArp() const;
+        /**
+         * Load routing table information from \p rtConfig file
+         */
+        bool
+        loadRoutingTable(const std::string &rtConfig);
 
-  /**
-   * Print router interfaces
-   */
-  void
-  printIfaces(std::ostream& os);
+        /**
+         * Load local interface configuration
+         */
+        void
+        loadIfconfig(const std::string &ifconfig);
 
-  /**
-   * Reset ARP cache and interface list (e.g., when mininet restarted)
-   */
-  void
-  reset(const pox::Ifaces& ports);
+        /**
+         * Get routing table
+         */
+        const RoutingTable &
+        getRoutingTable() const;
 
-  /**
-   * Find interface based on interface's IP address
-   */
-  const Interface*
-  findIfaceByIp(uint32_t ip) const;
+        /**
+         * Get ARP table
+         */
+        const ArpCache &
+        getArp() const;
 
-  /**
-   * Find interface based on interface's MAC address
-   */
-  const Interface*
-  findIfaceByMac(const Buffer& mac) const;
+        /**
+         * Print router interfaces
+         */
+        void
+        printIfaces(std::ostream &os);
 
-  /**
-   * Find interface based on interface's name
-   */
-  const Interface*
-  findIfaceByName(const std::string& name) const;
+        /**
+         * Reset ARP cache and interface list (e.g., when mininet restarted)
+         */
+        void
+        reset(const pox::Ifaces &ports);
 
-private:
-  ArpCache m_arp;
-  RoutingTable m_routingTable;
-  std::set<Interface> m_ifaces;
-  std::map<std::string, uint32_t> m_ifNameToIpMap;
+        /**
+         * Find interface based on interface's IP address
+         */
+        const Interface *
+        findIfaceByIp(uint32_t ip) const;
 
-  friend class Router;
-  pox::PacketInjectorPrx m_pox;
-};
+        /**
+         * Find interface based on interface's MAC address
+         */
+        const Interface *
+        findIfaceByMac(const Buffer &mac) const;
 
-inline const RoutingTable&
-SimpleRouter::getRoutingTable() const
-{
-  return m_routingTable;
-}
+        /**
+         * Find interface based on interface's name
+         */
+        const Interface *
+        findIfaceByName(const std::string &name) const;
 
-inline const ArpCache&
-SimpleRouter::getArp() const
-{
-  return m_arp;
-}
+    private:
+        ArpCache m_arp;
+        RoutingTable m_routingTable;
+        std::set<Interface> m_ifaces;
+        std::map<std::string, uint32_t> m_ifNameToIpMap;
+
+        friend class Router;
+        pox::PacketInjectorPrx m_pox;
+    };
+
+    inline const RoutingTable &
+    SimpleRouter::getRoutingTable() const
+    {
+        return m_routingTable;
+    }
+
+    inline const ArpCache &
+    SimpleRouter::getArp() const
+    {
+        return m_arp;
+    }
 
 } // namespace simple_router
 
