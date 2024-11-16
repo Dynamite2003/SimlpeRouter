@@ -46,7 +46,7 @@ namespace simple_router
                 // 为所有等待的包生成 ICMP Host Unreachable 消息
                 for (const auto &packet : req->packets)
                 {
-                    m_router.sendIcmpDestinationUnreachable(packet.packet, packet.iface);
+                    m_router.handleIcmpNetUnreachable(packet.packet, packet.iface);
                 }
 
                 // 从队列中移除请求

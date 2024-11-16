@@ -24,6 +24,16 @@
 
 #include "pox.hpp"
 
+// 定义宏ICMP
+#define ICMP_ECHO_REPLY 0
+#define ICMP_ECHO_REQUEST 8
+#define ICMP_DEST_UNREACH 3
+#define ICMP_TIME_EXCEEDED 11
+#define ICMP_TTL_EXCEEDED 0
+// 定义宏IP
+constexpr uint8_t ip_protocol_icmp = 1;
+constexpr uint8_t ip_protocol_tcp = 6;
+constexpr uint8_t ip_protocol_udp = 17;
 namespace simple_router
 {
 
@@ -45,17 +55,36 @@ namespace simple_router
         void fillEthernetHeader(Buffer &packet, const uint8_t *srcMac, const uint8_t *dstMac, uint16_t etherType);
         // 辅助函数 填充arp帧header
         void fillArpHeader(Buffer &packet, uint32_t srcIp, const uint8_t *srcMac, uint32_t dstIp, const uint8_t *dstMac, uint16_t opCode);
+        // 发送ARP请求
+        void sendArpRequest(uint32_t ip);
 
         // 处理IP的函数
         // 处理IP数据包
         void handleIPv4Packet(const Buffer &packet, const std::string &iface);
-        // 发送ARP请求
-        void sendArpRequest(uint32_t ip);
+        void processLocalIpPacket(const Buffer &packet, const std::string &inIface, const ip_hdr *ipHeader, uint8_t ipHeaderLen);
+        void forwardIpPacket(const Buffer &packet, const std::string &inIface, const ip_hdr *ipHeader, uint8_t ipHeaderLen);
 
         // 发送ICMP消息的函数
-        // 发送目的地址不可达的回复给源地址
-        void sendIcmpDestinationUnreachable(const Buffer &packet, const std::string &iface);
+        void sendIcmpError(const Buffer &packet, const std::string &inIface, uint8_t type, uint8_t code);
+        void handleIcmpPortUnreachable(const Buffer &packet, const std::string &inIface)
+        {
+            // ICMP 类型 3（Destination Unreachable），代码 3（Port Unreachable）
+            sendIcmpError(packet, inIface, 3, 3);
+        }
 
+        void handleIcmpTimeExceeded(const Buffer &packet, const std::string &inIface)
+        {
+            // ICMP 类型 11（Time Exceeded），代码 0（TTL Exceeded）
+            sendIcmpError(packet, inIface, 11, 0);
+        }
+
+        void handleIcmpNetUnreachable(const Buffer &packet, const std::string &inIface)
+        {
+            // ICMP 类型 3（Destination Unreachable），代码 0（Network Unreachable）
+            sendIcmpError(packet, inIface, 3, 0);
+        }
+        void handleIcmpPacket(const Buffer &packet, const std::string &inIface);
+        void sendIcmpEchoReply(const Buffer &packet, const std::string &inIface);
         /**
          * IMPLEMENT THIS METHOD
          *

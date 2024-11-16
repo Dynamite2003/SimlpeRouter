@@ -22,95 +22,139 @@
 #include <assert.h>
 #include <string.h>
 #include <unistd.h>
-
-namespace simple_router {
-
-//////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////
-// IMPLEMENT THIS METHOD
-RoutingTableEntry
-RoutingTable::lookup(uint32_t ip) const
+namespace simple_router
 {
-
-  // FILL THIS IN
-
-  throw std::runtime_error("Routing entry not found");
-}
-//////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////
-
-// You should not need to touch the rest of this code.
-
-bool
-RoutingTable::load(const std::string& file)
-{
-  FILE* fp;
-  char  line[BUFSIZ];
-  char  dest[32];
-  char  gw[32];
-  char  mask[32];
-  char  iface[32];
-  struct in_addr dest_addr;
-  struct in_addr gw_addr;
-  struct in_addr mask_addr;
-
-  if (access(file.c_str(), R_OK) != 0) {
-    perror("access");
-    return false;
-  }
-
-  fp = fopen(file.c_str(), "r");
-
-  while (fgets(line, BUFSIZ, fp) != 0) {
-    sscanf(line,"%s %s %s %s", dest, gw, mask, iface);
-    if (inet_aton(dest, &dest_addr) == 0) {
-      fprintf(stderr,
-              "Error loading routing table, cannot convert %s to valid IP\n",
-              dest);
-      return false;
-    }
-    if (inet_aton(gw, &gw_addr) == 0) {
-      fprintf(stderr,
-              "Error loading routing table, cannot convert %s to valid IP\n",
-              gw);
-      return false;
-    }
-    if (inet_aton(mask, &mask_addr) == 0) {
-      fprintf(stderr,
-              "Error loading routing table, cannot convert %s to valid IP\n",
-              mask);
-      return false;
+    int countSetBits(uint32_t n)
+    {
+        int count = 0;
+        while (n)
+        {
+            n &= (n - 1);
+            count++;
+        }
+        return count;
     }
 
-    addEntry({dest_addr.s_addr, gw_addr.s_addr, mask_addr.s_addr, iface});
-  }
-  return true;
-}
+    //////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////
+    // IMPLEMENT THIS METHOD
+    RoutingTableEntry
+    RoutingTable::lookup(uint32_t ip) const
+    {
+        const RoutingTableEntry *bestMatch = nullptr;
+        int longestPrefixLen = -1;
 
-void
-RoutingTable::addEntry(RoutingTableEntry entry)
-{
-  m_entries.push_back(std::move(entry));
-}
+        for (const auto &entry : m_entries)
+        {
+            // 计算网络前缀
+            uint32_t entryNetwork = entry.dest & entry.mask;
+            uint32_t ipNetwork = ip & entry.mask;
 
-std::ostream&
-operator<<(std::ostream& os, const RoutingTableEntry& entry)
-{
-  os << ipToString(entry.dest) << "\t\t"
-     << ipToString(entry.gw) << "\t"
-     << ipToString(entry.mask) << "\t"
-     << entry.ifName;
-  return os;
-}
+            // 检查前缀是否匹配
+            if (entryNetwork == ipNetwork)
+            {
+                // 计算前缀长度
+                int prefixLen = countSetBits(ntohl(entry.mask));
 
-std::ostream&
-operator<<(std::ostream& os, const RoutingTable& table)
-{
-  os << "Destination\tGateway\t\tMask\tIface\n";
-  for (const auto& entry : table.m_entries) {
-    os << entry << "\n";
-  }
-  return os;
-}
+                // 更新最佳匹配
+                if (prefixLen > longestPrefixLen)
+                {
+                    longestPrefixLen = prefixLen;
+                    bestMatch = &entry;
+                }
+            }
+        }
+
+        if (bestMatch)
+        {
+            return *bestMatch;
+        }
+        else
+        {
+            throw std::runtime_error("Routing entry not found");
+        }
+    }
+    //////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////
+
+    // You should not need to touch the rest of this code.
+
+    bool
+    RoutingTable::load(const std::string &file)
+    {
+        FILE *fp;
+        char line[BUFSIZ];
+        char dest[32];
+        char gw[32];
+        char mask[32];
+        char iface[32];
+        struct in_addr dest_addr;
+        struct in_addr gw_addr;
+        struct in_addr mask_addr;
+
+        if (access(file.c_str(), R_OK) != 0)
+        {
+            perror("access");
+            return false;
+        }
+
+        fp = fopen(file.c_str(), "r");
+
+        while (fgets(line, BUFSIZ, fp) != 0)
+        {
+            sscanf(line, "%s %s %s %s", dest, gw, mask, iface);
+            if (inet_aton(dest, &dest_addr) == 0)
+            {
+                fprintf(stderr,
+                        "Error loading routing table, cannot convert %s to valid IP\n",
+                        dest);
+                return false;
+            }
+            if (inet_aton(gw, &gw_addr) == 0)
+            {
+                fprintf(stderr,
+                        "Error loading routing table, cannot convert %s to valid IP\n",
+                        gw);
+                return false;
+            }
+            if (inet_aton(mask, &mask_addr) == 0)
+            {
+                fprintf(stderr,
+                        "Error loading routing table, cannot convert %s to valid IP\n",
+                        mask);
+                return false;
+            }
+
+            addEntry({dest_addr.s_addr, gw_addr.s_addr, mask_addr.s_addr, iface});
+        }
+        return true;
+    }
+
+    void
+    RoutingTable::addEntry(RoutingTableEntry entry)
+    {
+        m_entries.push_back(std::move(entry));
+    }
+
+    std::ostream &
+    operator<<(std::ostream &os, const RoutingTableEntry &entry)
+    {
+        os << ipToString(entry.dest) << "\t\t"
+           << ipToString(entry.gw) << "\t"
+           << ipToString(entry.mask) << "\t"
+           << entry.ifName;
+        return os;
+    }
+
+    std::ostream &
+    operator<<(std::ostream &os, const RoutingTable &table)
+    {
+        os << "Destination\tGateway\t\tMask\tIface\n";
+        for (const auto &entry : table.m_entries)
+        {
+            os << entry << "\n";
+        }
+        return os;
+    }
 
 } // namespace simple_router
