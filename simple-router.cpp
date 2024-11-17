@@ -190,36 +190,68 @@ namespace simple_router
 
         // 解析 ARP 回复头部
         const ethernet_hdr *ethHeader = reinterpret_cast<const ethernet_hdr *>(packet.data());
-        const arp_hdr *arpHeader = reinterpret_cast<const arp_hdr *>(packet.data() + sizeof(ethernet_hdr));
+        const arp_hdr *arp_ptr = reinterpret_cast<const arp_hdr *>(packet.data() + sizeof(ethernet_hdr));
 
-        // 提取源 IP 和 MAC
-        uint32_t srcIp = arpHeader->arp_sip;
-        const uint8_t *srcMac = arpHeader->arp_sha;
+        uint32_t sender_ip = arp_ptr->arp_sip;
+        Buffer sender_mac(arp_ptr->arp_sha, arp_ptr->arp_sha + ETHER_ADDR_LEN);
 
-        // 插入到 ARP 缓存中
-        std::shared_ptr<ArpRequest> req = m_arp.insertArpEntry(Buffer(srcMac, srcMac + ETHER_ADDR_LEN), srcIp);
+        std::cout << "Received ARP Reply: IP " << ipToString(sender_ip) << " MAC " << macToString(sender_mac) << std::endl;
 
-        if (!req)
+        // 检查 ARP 缓存中是否已存在该 IP
+        auto existing_entry = m_arp.lookup(sender_ip);
+        if (existing_entry)
         {
-            std::cerr << "No pending ARP requests for IP " << ipToString(srcIp) << std::endl;
-            return;
+            std::cout << "IP " << ipToString(sender_ip) << " already exists in ARP cache, updating MAC address." << std::endl;
+            existing_entry->mac = sender_mac;                // 更新 MAC 地址
+            existing_entry->timeAdded = steady_clock::now(); // 可选：更新时间戳
         }
-
-        // 发送所有等待中的数据包
-        for (const auto &pendingPacket : req->packets)
+        else
         {
-            std::cerr << "Sending pending packet to IP " << ipToString(srcIp) << " via " << pendingPacket.iface << std::endl;
-            sendPacket(pendingPacket.packet, pendingPacket.iface);
-        }
+            std::cout << "IP " << ipToString(sender_ip) << " does not exist in ARP cache, inserting new entry." << std::endl;
+            // 插入新的 ARP 缓存条目
+            auto arp_req = m_arp.insertArpEntry(sender_mac, sender_ip);
+            if (arp_req)
+            {
+                std::cout << "Handle queued requests for the IP/MAC" << std::endl;
+                for (const auto &pkt : arp_req->packets)
+                {
+                    std::cerr << "Resending queued packet to interface " << pkt.iface << std::endl;
+                    // 查找对应的接口
+                    const Interface *outIface = findIfaceByName(pkt.iface);
+                    if (outIface)
+                    {
+                        // 更新以太网头部
+                        ethernet_hdr *ethHdr = reinterpret_cast<ethernet_hdr *>(const_cast<uint8_t *>(pkt.packet.data()));
+                        memcpy(ethHdr->ether_shost, outIface->addr.data(), ETHER_ADDR_LEN); // 设置源 MAC 为出接口的 MAC
+                        memcpy(ethHdr->ether_dhost, sender_mac.data(), ETHER_ADDR_LEN);     // 设置目标 MAC 为 ARP 回复中的 MAC
+                        ethHdr->ether_type = htons(ethertype_ip);                           // 确保 EtherType 为 IP
 
-        // 移除请求队列
-        m_arp.removeRequest(req);
-        std::cerr << "Processed all pending packets for ARP Reply." << std::endl;
+                        std::cerr << "src MAC: " << macToString(outIface->addr) << " dst MAC: " << macToString(sender_mac) << std::endl;
+
+                        // 重新计算 IP 校验和（如果需要）
+                        ip_hdr *ipHeader = reinterpret_cast<ip_hdr *>(const_cast<uint8_t *>(pkt.packet.data()) + sizeof(ethernet_hdr));
+                        ipHeader->ip_sum = 0;
+                        ipHeader->ip_sum = cksum(reinterpret_cast<uint16_t *>(ipHeader), ipHeader->ip_hl * 4);
+
+                        // 发送数据包
+                        sendPacket(pkt.packet, pkt.iface);
+                    }
+                    else
+                    {
+                        std::cerr << "Interface " << pkt.iface << " not found, cannot resend packet." << std::endl;
+                    }
+                }
+                m_arp.removeRequest(arp_req);
+            }
+            else
+            {
+                std::cout << "No queued requests for the IP/MAC" << std::endl;
+            }
+        }
     }
 
     void SimpleRouter::sendArpRequest(uint32_t ip)
     {
-        std::cout << "Sending ARP Request" << std::endl;
 
         // 创建一个缓冲区来存储以太网帧和 ARP 包
         Buffer req(sizeof(ethernet_hdr) + sizeof(arp_hdr));
@@ -248,7 +280,6 @@ namespace simple_router
         sendPacket(req, outIface->name);
     }
 
-    // 处理IP数据包
     void SimpleRouter::handleIPv4Packet(const Buffer &packet, const std::string &inIface)
     {
         // 检查数据包长度是否足够包含 IP 头部
@@ -260,6 +291,14 @@ namespace simple_router
 
         // 解析 IP 头部
         const ip_hdr *ipHeader = reinterpret_cast<const ip_hdr *>(packet.data() + sizeof(ethernet_hdr));
+
+        // 打印调试信息，包括 seq 和其他信息
+        std::cerr << "[DEBUG] Received IP packet on " << inIface
+                  << " | seq: " << ntohs(ipHeader->ip_id)
+                  << " | src: " << ipToString(ipHeader->ip_src)
+                  << " | dst: " << ipToString(ipHeader->ip_dst)
+                  << " | ttl: " << static_cast<int>(ipHeader->ip_ttl)
+                  << std::endl;
 
         // 检查 IP 头部长度
         uint8_t ipHeaderLen = ipHeader->ip_hl * 4;
@@ -298,6 +337,24 @@ namespace simple_router
                 isForRouter = true;
                 break;
             }
+        }
+
+        // **Update ARP cache with source IP and MAC**
+        const ethernet_hdr *ethHeader = reinterpret_cast<const ethernet_hdr *>(packet.data());
+        uint32_t srcIp = ipHeader->ip_src;
+        const uint8_t *srcMac = ethHeader->ether_shost;
+
+        // 检查 ARP 缓存中是否已存在该 IP
+        if (m_arp.lookup(srcIp))
+        {
+            std::cerr << "IP " << ipToString(srcIp) << " already exists in ARP cache, updating MAC address." << std::endl;
+            // m_arp.removeEntry(srcIp); // 删除旧条目
+        }
+        else
+        {
+            // 插入新的 ARP 缓存条目
+            m_arp.insertArpEntry(Buffer(srcMac, srcMac + ETHER_ADDR_LEN), srcIp);
+            std::cerr << "IP " << ipToString(srcIp) << " does not exist in ARP cache, inserting new entry." << std::endl;
         }
 
         if (isForRouter)
@@ -376,6 +433,7 @@ namespace simple_router
         Buffer nextHopMac;
         if (arpEntry)
         {
+            std::cerr << "ARP entry found for IP " << ipToString(nextHopIp) << std::endl;
             nextHopMac = arpEntry->mac;
 
             // 更新以太网头部
@@ -397,10 +455,12 @@ namespace simple_router
         }
         else
         {
-            // ARP 缓存中没有下一跳的 MAC 地址，发送 ARP 请求并将数据包加入等待队列
-            std::cerr << "MAC address for next hop " << ipToString(nextHopIp) << " not found, sending ARP request." << std::endl;
-            m_arp.queueRequest(nextHopIp, newPacket, entry.ifName);
+            // 发送 ARP 请求
+            std::cerr << "ARP entry not found for IP " << ipToString(nextHopIp) << ", sending ARP request" << std::endl;
             sendArpRequest(nextHopIp);
+            // 将数据包加入等待队列
+            auto req = m_arp.queueRequest(nextHopIp, packet, entry.ifName);
+            std::cerr << "Current queue size for IP " << ipToString(nextHopIp) << ": " << req->packets.size() << std::endl;
         }
     }
     void SimpleRouter::sendIcmpError(const Buffer &packet, const std::string &inIface, uint8_t type, uint8_t code)
@@ -503,34 +563,28 @@ namespace simple_router
     }
     void SimpleRouter::sendIcmpEchoReply(const Buffer &packet, const std::string &inIface)
     {
-        // 解析原始数据包的以太网和 IP 头部
+        // Parse original Ethernet and IP headers
         const ethernet_hdr *origEthHdr = reinterpret_cast<const ethernet_hdr *>(packet.data());
         const ip_hdr *origIpHdr = reinterpret_cast<const ip_hdr *>(packet.data() + sizeof(ethernet_hdr));
         uint8_t origIpHdrLen = origIpHdr->ip_hl * 4;
 
-        // 获取 ICMP 数据长度
+        // Get ICMP data length
         size_t icmpLen = ntohs(origIpHdr->ip_len) - origIpHdrLen;
         size_t newPacketLen = sizeof(ethernet_hdr) + origIpHdrLen + icmpLen;
 
-        // 创建新的数据包缓冲区
+        // Create a new packet buffer
         Buffer reply(newPacketLen);
 
-        // 构造以太网头部
-        ethernet_hdr *ethHdr = reinterpret_cast<ethernet_hdr *>(reply.data());
-        memcpy(ethHdr->ether_shost, origEthHdr->ether_dhost, ETHER_ADDR_LEN);
-        memcpy(ethHdr->ether_dhost, origEthHdr->ether_shost, ETHER_ADDR_LEN);
-        ethHdr->ether_type = htons(ethertype_ip);
-
-        // 构造 IP 头部
+        // Copy IP header and prepare for modifications
         ip_hdr *ipHdr = reinterpret_cast<ip_hdr *>(reply.data() + sizeof(ethernet_hdr));
         memcpy(ipHdr, origIpHdr, origIpHdrLen);
         ipHdr->ip_ttl = 64;
-        ipHdr->ip_src = origIpHdr->ip_dst;
-        ipHdr->ip_dst = origIpHdr->ip_src;
+        ipHdr->ip_src = origIpHdr->ip_dst; // Our router's IP
+        ipHdr->ip_dst = origIpHdr->ip_src; // Source IP of the request
         ipHdr->ip_sum = 0;
         ipHdr->ip_sum = cksum(reinterpret_cast<uint16_t *>(ipHdr), origIpHdrLen);
 
-        // 构造 ICMP 头部和数据
+        // Copy ICMP header and data
         icmp_hdr *icmpHdr = reinterpret_cast<icmp_hdr *>(reply.data() + sizeof(ethernet_hdr) + origIpHdrLen);
         memcpy(icmpHdr, packet.data() + sizeof(ethernet_hdr) + origIpHdrLen, icmpLen);
         icmpHdr->icmp_type = ICMP_ECHO_REPLY;
@@ -538,8 +592,41 @@ namespace simple_router
         icmpHdr->icmp_sum = 0;
         icmpHdr->icmp_sum = cksum(reinterpret_cast<uint16_t *>(icmpHdr), icmpLen);
 
-        // 发送 ICMP Echo Reply
-        sendPacket(reply, inIface);
+        // Perform routing table lookup for the source IP address
+        RoutingTableEntry entry = m_routingTable.lookup(ipHdr->ip_dst);
+        if (entry.ifName.empty())
+        {
+            std::cerr << "No route found for source IP, cannot send Echo Reply." << std::endl;
+            return;
+        }
+        const Interface *outIface = findIfaceByName(entry.ifName);
+        if (!outIface)
+        {
+            std::cerr << "Output interface not found." << std::endl;
+            return;
+        }
+
+        // Determine next-hop IP address
+        uint32_t nextHopIp = entry.gw == 0 ? ipHdr->ip_dst : entry.gw;
+
+        // Lookup ARP cache for next-hop MAC address
+        auto arpEntry = m_arp.lookup(nextHopIp);
+        if (!arpEntry)
+        {
+            // Send ARP request and queue the packet
+            sendArpRequest(nextHopIp);
+            m_arp.queueRequest(nextHopIp, reply, outIface->name);
+            return;
+        }
+
+        // Construct Ethernet header with correct MAC addresses
+        ethernet_hdr *ethHdr = reinterpret_cast<ethernet_hdr *>(reply.data());
+        memcpy(ethHdr->ether_shost, outIface->addr.data(), ETHER_ADDR_LEN); // Our router's MAC
+        memcpy(ethHdr->ether_dhost, arpEntry->mac.data(), ETHER_ADDR_LEN);  // Next-hop MAC
+        ethHdr->ether_type = htons(ethertype_ip);
+
+        // Send the Echo Reply via the appropriate interface
+        sendPacket(reply, outIface->name);
     }
 
     //////////////////////////////////////////////////////////////////////////
@@ -578,7 +665,9 @@ namespace simple_router
 
         // 识别目的MAC地址
         if (memcmp(eth_hdr->ether_dhost, iface->addr.data(), ETHER_ADDR_LEN) != 0 && memcmp(eth_hdr->ether_dhost, BROADCAST_ADDR.data(), ETHER_ADDR_LEN) != 0)
+
         {
+            std::cerr << "Destination MAC address : " << macToString(Buffer(eth_hdr->ether_dhost, eth_hdr->ether_dhost + ETHER_ADDR_LEN)) << std::endl;
             std::cerr << "Destination MAC address is not local interface's MAC address or broadcast address, ignoring" << std::endl;
             return;
         }

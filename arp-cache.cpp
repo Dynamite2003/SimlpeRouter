@@ -51,6 +51,7 @@ namespace simple_router
 
                 // 从队列中移除请求
                 removeRequest(req);
+                std::cerr << "ARP request for IP " << ipToString(req->ip) << " removed." << std::endl;
             }
             else
             {
@@ -82,6 +83,7 @@ namespace simple_router
             if (!entry->isValid)
             {
                 to_remove_entires.push_back(entry);
+                std::cerr << "Invalid entry for IP " << ipToString(entry->ip) << std::endl;
             }
         }
         for (auto &to_remove_entry : to_remove_entires)

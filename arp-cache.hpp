@@ -81,7 +81,7 @@ namespace simple_router
     using seconds = std::chrono::seconds;
 
     const seconds SR_ARPCACHE_TO = seconds(30);
-    const uint32_t MAX_SENT_TIME = 5;
+    const uint32_t MAX_SENT_TIME = 20;
 
     struct PendingPacket
     {
@@ -117,7 +117,7 @@ namespace simple_router
         Buffer mac;
         uint32_t ip = 0; //< IP addr in network byte order
         time_point timeAdded;
-        bool isValid = false;
+        bool isValid = true;
     };
 
     class ArpCache
