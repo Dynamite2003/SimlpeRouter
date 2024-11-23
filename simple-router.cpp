@@ -282,6 +282,7 @@ namespace simple_router
 
     void SimpleRouter::handleIPv4Packet(const Buffer &packet, const std::string &inIface)
     {
+        std::cerr << "Enter HandleIpv4Packet" << std::endl;
         // 检查数据包长度是否足够包含 IP 头部
         if (packet.size() < sizeof(ethernet_hdr) + sizeof(ip_hdr))
         {
@@ -316,17 +317,26 @@ namespace simple_router
             return;
         }
 
-        // 验证 IP 校验和
-        uint16_t receivedChecksum = ipHeader->ip_sum;
+        // Extract and verify checksum
+        uint16_t receivedChecksum = ipHeader->ip_sum; // Use directly without ntohs
         ip_hdr tempHeader = *ipHeader;
         tempHeader.ip_sum = 0;
+
+        // Calculate checksum
         uint16_t calculatedChecksum = cksum(reinterpret_cast<uint16_t *>(&tempHeader), ipHeaderLen);
+
+        // Handle zero checksum case if necessary
+        if (calculatedChecksum == 0)
+        {
+            calculatedChecksum = 0xFFFF;
+        }
+
+        // Compare checksums
         if (receivedChecksum != calculatedChecksum)
         {
             std::cerr << "Invalid IP checksum" << std::endl;
             return;
         }
-
         // 检查目的 IP 地址是否为路由器自身的 IP 地址
         uint32_t destIp = ipHeader->ip_dst;
         bool isForRouter = false;
@@ -335,6 +345,7 @@ namespace simple_router
             if (iface.ip == destIp)
             {
                 isForRouter = true;
+                std::cerr << "IP packet is for router" << std::endl;
                 break;
             }
         }
@@ -391,6 +402,7 @@ namespace simple_router
 
     void SimpleRouter::forwardIpPacket(const Buffer &packet, const std::string &inIface, const ip_hdr *ipHeader, uint8_t ipHeaderLen)
     {
+        std::cerr << "Enter Forwarding IP packet" << std::endl;
         // 检查并递减 TTL
         if (ipHeader->ip_ttl <= 1)
         {
@@ -416,7 +428,7 @@ namespace simple_router
         if (entry.ifName.empty())
         {
             std::cerr << "No matching route found, sending ICMP Destination Net Unreachable" << std::endl;
-            // sendIcmpError(packet, inIface, icmp_type_destination_unreachable, icmp_code_net_unreachable);
+            sendIcmpError(packet, inIface, ICMP_DEST_UNREACH, ICMP_CODE_NET_UNREACH);
             return;
         }
 
@@ -463,104 +475,103 @@ namespace simple_router
             std::cerr << "Current queue size for IP " << ipToString(nextHopIp) << ": " << req->packets.size() << std::endl;
         }
     }
+
     void SimpleRouter::sendIcmpError(const Buffer &packet, const std::string &inIface, uint8_t type, uint8_t code)
     {
-        // 解析原始数据包的以太网和 IP 头部
-        const ethernet_hdr *origEthHdr = reinterpret_cast<const ethernet_hdr *>(packet.data());
-        const ip_hdr *origIpHdr = reinterpret_cast<const ip_hdr *>(packet.data() + sizeof(ethernet_hdr));
-        uint8_t origIpHdrLen = origIpHdr->ip_hl * 4;
+        ethernet_hdr *eth_ptr = (struct ethernet_hdr *)((uint8_t *)packet.data());
+        ip_hdr *ip_ptr = (struct ip_hdr *)((uint8_t *)packet.data() + sizeof(ethernet_hdr));
 
-        // 检查数据包长度
-        if (packet.size() < sizeof(ethernet_hdr) + origIpHdrLen + 8)
-        {
-            std::cerr << "Packet too short for ICMP error message" << std::endl;
-            return;
-        }
-
-        // 创建新的数据包缓冲区
-        size_t icmpDataLen = origIpHdrLen + 8; // 原始 IP 头部和前 8 个字节的数据
-        size_t newPacketLen = sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(icmp_t3_hdr);
-        Buffer reply(newPacketLen);
-
-        // 获取输出接口信息
+        Buffer reply(sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(icmp_t3_hdr));
         const Interface *outIface = findIfaceByName(inIface);
-        if (!outIface)
-        {
-            std::cerr << "Interface " << inIface << " not found" << std::endl;
-            return;
-        }
 
-        // 构造以太网头部
-        ethernet_hdr *ethHdr = reinterpret_cast<ethernet_hdr *>(reply.data());
-        memcpy(ethHdr->ether_shost, outIface->addr.data(), ETHER_ADDR_LEN);
-        memcpy(ethHdr->ether_dhost, origEthHdr->ether_shost, ETHER_ADDR_LEN);
-        ethHdr->ether_type = htons(ethertype_ip);
+        // ethernet
+        ethernet_hdr *rep_eth = (ethernet_hdr *)reply.data();
+        memcpy(rep_eth->ether_dhost, eth_ptr->ether_shost, ETHER_ADDR_LEN);
+        memcpy(rep_eth->ether_shost, eth_ptr->ether_dhost, ETHER_ADDR_LEN);
+        rep_eth->ether_type = htons(ethertype_ip);
 
-        // 构造 IP 头部
-        ip_hdr *ipHdr = reinterpret_cast<ip_hdr *>(reply.data() + sizeof(ethernet_hdr));
-        ipHdr->ip_v = 4;
-        ipHdr->ip_hl = 5;
-        ipHdr->ip_tos = 0;
-        ipHdr->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t3_hdr));
-        ipHdr->ip_id = 0;
-        ipHdr->ip_off = htons(IP_DF);
-        ipHdr->ip_ttl = 64;
-        ipHdr->ip_p = ip_protocol_icmp;
-        ipHdr->ip_src = outIface->ip;
-        ipHdr->ip_dst = origIpHdr->ip_src;
-        ipHdr->ip_sum = 0;
-        ipHdr->ip_sum = cksum(reinterpret_cast<uint16_t *>(ipHdr), sizeof(ip_hdr));
+        // ip
+        ip_hdr *rep_ip = (ip_hdr *)(reply.data() + sizeof(ethernet_hdr));
+        memcpy(rep_ip, ip_ptr, sizeof(ip_hdr));
+        rep_ip->ip_tos = 0;
+        rep_ip->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t3_hdr));
+        rep_ip->ip_id = 0;
+        rep_ip->ip_ttl = 64;
+        rep_ip->ip_p = ip_protocol_icmp;
+        rep_ip->ip_sum = 0;
+        rep_ip->ip_src = outIface->ip;
+        rep_ip->ip_dst = ip_ptr->ip_src;
+        rep_ip->ip_sum = cksum(rep_ip, sizeof(ip_hdr));
 
-        // 构造 ICMP 错误消息
-        icmp_t3_hdr *icmpHdr = reinterpret_cast<icmp_t3_hdr *>(reply.data() + sizeof(ethernet_hdr) + sizeof(ip_hdr));
-        icmpHdr->icmp_type = type;
-        icmpHdr->icmp_code = code;
-        icmpHdr->unused = 0;
-        icmpHdr->next_mtu = 0;
-        memcpy(icmpHdr->data, origIpHdr, icmpDataLen);
-        icmpHdr->icmp_sum = 0;
-        icmpHdr->icmp_sum = cksum(reinterpret_cast<uint16_t *>(icmpHdr), sizeof(icmp_t3_hdr));
-
-        // 发送 ICMP 错误消息
+        // icmp type3
+        icmp_t3_hdr *rep_icmpt3 = (struct icmp_t3_hdr *)(reply.data() + sizeof(ethernet_hdr) + sizeof(ip_hdr));
+        rep_icmpt3->icmp_type = type;
+        rep_icmpt3->icmp_code = code;
+        rep_icmpt3->icmp_sum = 0;
+        rep_icmpt3->next_mtu = 0;
+        rep_icmpt3->unused = 0;
+        std::memcpy(rep_icmpt3->data, ip_ptr, ICMP_DATA_SIZE);
+        rep_icmpt3->icmp_sum = cksum(rep_icmpt3, sizeof(icmp_t3_hdr));
+        std::cerr << "Sending ICMP error type " << static_cast<int>(type) << " code " << static_cast<int>(code) << std::endl;
         sendPacket(reply, inIface);
     }
 
     void SimpleRouter::handleIcmpPacket(const Buffer &packet, const std::string &inIface)
     {
-        // 解析 IP 头部
+        std::cout << "Handling ICMP packet" << std::endl;
+
+        // 检查数据包长度是否足够
+        if (packet.size() < sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(icmp_hdr))
+        {
+            std::cout << "Packet is too short for ICMP header, ignoring." << std::endl;
+            return;
+        }
+
+        // 获取 IP 头部
         const ip_hdr *ipHdr = reinterpret_cast<const ip_hdr *>(packet.data() + sizeof(ethernet_hdr));
         uint8_t ipHdrLen = ipHdr->ip_hl * 4;
 
-        // 检查数据包长度
-        if (packet.size() < sizeof(ethernet_hdr) + ipHdrLen + sizeof(icmp_hdr))
+        // 检查 IP 头部长度是否合理
+        if (ipHdrLen < sizeof(ip_hdr))
         {
-            std::cerr << "Packet too short for ICMP header" << std::endl;
+            std::cout << "Invalid IP header length: " << static_cast<int>(ipHdrLen) << std::endl;
             return;
         }
 
-        // 解析 ICMP 头部
+        // 获取 ICMP 头部
         const icmp_hdr *icmpHdr = reinterpret_cast<const icmp_hdr *>(packet.data() + sizeof(ethernet_hdr) + ipHdrLen);
 
-        // 校验和验证
-        size_t icmpLen = ntohs(ipHdr->ip_len) - ipHdrLen;
-        uint16_t receivedChecksum = icmpHdr->icmp_sum;
-        uint16_t calculatedChecksum = cksum(reinterpret_cast<uint16_t *>(const_cast<icmp_hdr *>(icmpHdr)), icmpLen);
-        if (receivedChecksum != calculatedChecksum)
+        // 计算 ICMP 数据长度
+        size_t icmpLen = packet.size() - sizeof(ethernet_hdr) - ipHdrLen;
+
+        // 检查数据包是否足够长
+        if (icmpLen < sizeof(icmp_hdr))
         {
-            std::cerr << "Invalid ICMP checksum" << std::endl;
+            std::cout << "ICMP header has insufficient length, ignoring." << std::endl;
             return;
         }
 
-        // 处理 ICMP Echo Request
-        if (icmpHdr->icmp_type == ICMP_ECHO_REQUEST && icmpHdr->icmp_code == 0)
+        // 检查 ICMP 类型和代码
+        if (icmpHdr->icmp_type != ICMP_ECHO_REQUEST || icmpHdr->icmp_code != 0)
         {
-            sendIcmpEchoReply(packet, inIface);
+            std::cout << "ICMP type is not echo request, ignoring." << std::endl;
+            return;
         }
-        else
+
+        // 计算校验和
+        uint16_t checksum = cksum((uint8_t *)icmpHdr, icmpLen);
+
+        // 验证校验和
+        if (checksum != 0xFFFF)
         {
-            std::cerr << "ICMP type " << static_cast<int>(icmpHdr->icmp_type) << " not handled, ignoring" << std::endl;
+            std::cout << "ICMP header checksum is invalid, ignoring." << std::endl;
+            return;
         }
+
+        // 处理 Echo Reply
+        sendIcmpEchoReply(packet, inIface);
     }
+
     void SimpleRouter::sendIcmpEchoReply(const Buffer &packet, const std::string &inIface)
     {
         // Parse original Ethernet and IP headers

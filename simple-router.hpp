@@ -30,6 +30,7 @@
 #define ICMP_DEST_UNREACH 3
 #define ICMP_TIME_EXCEEDED 11
 #define ICMP_TTL_EXCEEDED 0
+#define ICMP_CODE_NET_UNREACH 0
 // 定义宏IP
 constexpr uint8_t ip_protocol_icmp = 1;
 constexpr uint8_t ip_protocol_tcp = 6;
@@ -81,6 +82,7 @@ namespace simple_router
         void handleIcmpNetUnreachable(const Buffer &packet, const std::string &inIface)
         {
             // ICMP 类型 3（Destination Unreachable），代码 0（Network Unreachable）
+            std::cerr << "handleIcmpNetUnreachable" << std::endl;
             sendIcmpError(packet, inIface, 3, 0);
         }
         void handleIcmpPacket(const Buffer &packet, const std::string &inIface);

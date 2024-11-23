@@ -50,7 +50,7 @@ namespace simple_router
                 }
 
                 // 从队列中移除请求
-                removeRequest(req);
+                m_arpRequests.remove(req);
                 std::cerr << "ARP request for IP " << ipToString(req->ip) << " removed." << std::endl;
             }
             else
@@ -58,7 +58,7 @@ namespace simple_router
                 // 重新发送 ARP 请求
                 std::cerr << "Resending ARP request for IP " << ipToString(req->ip) << std::endl;
 
-                // 从第一个等待包中获取接口
+                // 发送 ARP 请求
                 m_router.sendArpRequest(req->ip);
 
                 // 更新发送时间和发送次数
@@ -68,29 +68,31 @@ namespace simple_router
         }
     }
 
-    void
-    ArpCache::periodicCheckArpRequestsAndCacheEntries()
+    void ArpCache::periodicCheckArpRequestsAndCacheEntries()
     {
-        for (auto &request : m_arpRequests)
+        auto it = m_arpRequests.begin();
+        while (it != m_arpRequests.end())
         {
-            handle_arpreq(request);
+            auto current = it++;
+            handle_arpreq(*current);
         }
 
-        // 处理remove逻辑
-        std::vector<std::shared_ptr<ArpEntry>> to_remove_entires;
+        // 处理 remove 逻辑
+        std::vector<std::shared_ptr<ArpEntry>> to_remove_entries;
         for (auto &entry : m_cacheEntries)
         {
             if (!entry->isValid)
             {
-                to_remove_entires.push_back(entry);
+                to_remove_entries.push_back(entry);
                 std::cerr << "Invalid entry for IP " << ipToString(entry->ip) << std::endl;
             }
         }
-        for (auto &to_remove_entry : to_remove_entires)
+        for (auto &to_remove_entry : to_remove_entries)
         {
             m_cacheEntries.remove(to_remove_entry);
         }
-    };
+    }
+
     // FILL THIS IN
     //////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////

@@ -81,7 +81,7 @@ namespace simple_router
     using seconds = std::chrono::seconds;
 
     const seconds SR_ARPCACHE_TO = seconds(30);
-    const uint32_t MAX_SENT_TIME = 20;
+    const uint32_t MAX_SENT_TIME = 5;
 
     struct PendingPacket
     {

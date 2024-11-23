@@ -1,0 +1,4 @@
+Ping response TTL incorrect from client to server1: -10 pts
+Ping to non-existing IP did not respond correctly: -5 pts
+Ping to unreachable host did not respond correctly: -5 pts
+Large file download verification failed: -10 pts
